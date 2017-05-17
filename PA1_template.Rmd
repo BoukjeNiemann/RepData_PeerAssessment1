@@ -7,19 +7,162 @@ output:
 
 
 ## Loading and preprocessing the data
+Read in the dataset of steps taken by a person for 2 months, measured in 5 minute intervals.  
+The dataset is stored in activity.zip included in this repository.  
+```{r}
+unzip("activity.zip")
+activity <- read.csv("activity.csv")
+str(activity)
+```
+The variables included in this dataset are:
 
+* **steps**: Number of steps taking in a 5-minute interval (missing
+    values are coded as `NA`)
 
+* **date**: The date on which the measurement was taken in YYYY-MM-DD
+    format
 
+* **interval**: Identifier for the 5-minute interval in which
+    measurement was taken, the last two digits mean the minutes of the hour
+    the first digits the hour, so 2355 means the interval from 23:55 to 24:00 hour.
+    
 ## What is mean total number of steps taken per day?
+To calculate the total number of steps taken per day we make a dataset where the steps are summarised
+over the different dates. The missing values are ignored for the moment.  
+```{r}
+StepsPerDay <- aggregate(steps ~ date, data=activity, sum)
+str(StepsPerDay)
+```
+Then we make it visible with a histogram of the total number of steps taken each day.  
+```{r}
+hist(StepsPerDay$steps, 
+     main = "Histogram of total number of steps per day",
+     xlab = "Total steps per day")
+```
 
+Finally we calculate and report the mean and median of the total number of steps taken each day. 
+```{r}
+mean(StepsPerDay$steps, na.rm=TRUE)
+median(StepsPerDay$steps, na.rm=TRUE)
+```
 
+```{r mean, echo=FALSE, results = 'hide'}
+meandata <- mean(StepsPerDay$steps, na.rm=TRUE)
+```
+
+```{r median, echo =FALSE, results='hide'}
+mediandata <- median(StepsPerDay$steps, na.rm=TRUE)
+```
+So the mean `r meandata` and the median `r mediandata` are quite close together.  
 
 ## What is the average daily activity pattern?
+To see what is the avarage daily pattern we first have to calculate the average 
+per time interval over all the days in the dataset.
+```{r}
+StepsPerInterval <- aggregate(steps ~ interval, data = activity, mean, na.rm=TRUE)
+str(StepsPerInterval)
+```
+Which we can now show in a nice plot.
+```{r}
+plot(StepsPerInterval$interval, StepsPerInterval$steps, type = "l",
+     main = "Average daily activity pattern",
+     xlab = "5-minute time interval",
+     ylab = "Number of steps taken")
+```
 
-
+It seems our test subject does some daily excersise somewhere between the 5:00 and 10:00 a.m.  
+Which 5-minute interval contains the maximum numbers of steps?
+```{r}
+StepsPerInterval[StepsPerInterval$steps == max(StepsPerInterval$steps), ]
+```
+It seem the test subject is on average taking the most steps around 8:35 am.  
 
 ## Imputing missing values
+Perhaps we have introduced some bias in this research by ignoring the missing values which are in the dataset activity.
+```{r}
+head(activity)
+```
 
+Let's see how many missing values there are in the dataset **activity**.
+```{r}
+missing <- sum(!complete.cases(activity))
+total <- nrow(activity)
+percentage <- round(missing/total*100, digits = 1)
+```
+That is `r missing` missing values on `r total` observations, which is `r percentage` %.  
+That is quite large, so let's see what happens when we impute the data.  
+First select the complete and incomplete cases.
+From the incomplete cases we drop the first column since there are only NA's in it.
+```{r}
+complete <- activity[complete.cases(activity),]
+incomplete <- activity[!complete.cases(activity),][-c(1)]
+head(complete)
+head(incomplete)
+```
 
+Then we use the **StepsPerInterval** dataset with the mean value per interval
+to give a (mean) value to the incomplete cases.
+```{r}
+completed <- merge(incomplete, StepsPerInterval, by = "interval")
+head(completed)
+```
+Finally we create a new dataset **activityImputed** which contains mean 
+values for the missing data. Since the order of the data is altered 
+by the merge and the pasting together of the data, we sort the final
+dataset again in the original order of **activity**.
+```{r}
+activityImputed <- rbind(complete, completed)
+activityImputed <- activityImputed[order(activityImputed$date,activityImputed$interval),]
+head(activityImputed)
+```
+Now we can analyse this imputed dataset and see if there is any difference.  
+First calculate the total number of steps taken per day, then make a histogram of it.  
+```{r}
+StepsPerDayImp <- aggregate(steps ~ date, data = activityImputed, sum)
+hist(StepsPerDayImp$steps,
+     main = "Histogram of total number of steps per day with imputed data",
+     xlab = "Total steps per day")
+```
+
+The original mean of the total steps taken per day was `r meandata`.
+The mean of the imputed data is:
+````{r}
+mean(StepsPerDayImp$steps, na.rm=TRUE)
+```
+Because we imputed the data with the mean value, the mean value will not alter.  
+
+The original median of the total steps taken per day was `r mediandata`. The median of the imputed data is:
+```{r}
+median(StepsPerDayImp$steps, na.rm=TRUE)
+```
+Because we added values the median will move to the mean value.  
+This also shows in the histogram. The frequency of the interval where the mean value is, is higher.  
 
 ## Are there differences in activity patterns between weekdays and weekends?
+Perhaps there is different behaviour in the weekend than on workdays.  
+To investigate that we need to create a new factor variable in the 
+dataset **activityImputed** with two levels: "weekend" and "weekday". 
+(Because my dutch locale can not be changed it says "zaterdag" for "Saturday" and "zondag" for "Sunday")
+```{r, results="hide"}
+day <- weekdays(as.Date(activityImputed$date))
+day[day %in% c("zaterdag","zondag")] <- "weekend"
+day[!(day %in% c("weekend"))] <- "weekday"
+factor(day)
+activityImputed <- cbind(activityImputed,day)
+```
+```{r}
+head(activityImputed)
+```
+Then we calculate the average steps per time interval again, but now also per type of day.
+```{r}
+StepsPerIntervalImp <- aggregate(steps ~ interval+day, data = activityImputed, mean)
+head(StepsPerIntervalImp)
+tail(StepsPerIntervalImp)
+str(StepsPerIntervalImp)
+```
+So the daily patterns change a little in weekends as compaired to weekdays as can be seen in this plot.
+```{r}
+lattice::xyplot(steps ~ interval | day, data = StepsPerIntervalImp, layout = c(1,2), type="l")
+```
+
+In weekends the testsubject moves a little less between 5:00 and 10:00 and a little more and longer for the rest of the day.
